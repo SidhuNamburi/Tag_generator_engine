@@ -6,18 +6,25 @@ Core NLP pipeline to extract, score, and diversify tags from web documents.
 import spacy
 import re
 import math
-import sqlite3
 import numpy as np
 from datetime import datetime, timedelta
 from collections import Counter
 from sentence_transformers import SentenceTransformer, util
 from sklearn.metrics.pairwise import cosine_similarity
+from pymongo import MongoClient
+
+# 1. Connect to MongoDB Cloud
+# Make sure to replace <> with your actual database password!
+MONGO_URI = "mongodb+srv://sidhunamburi05_db_user:hL7jhKP4cFgv3gap@cluster0.slua3xp.mongodb.net/?appName=Cluster0"
+client = MongoClient(MONGO_URI)
+
+# 2. Select the database and collection
+db = client["tag_trail_db"]
+collection = db["tag_memory"]
 
 # --- Configuration & Models ---
 nlp = spacy.load("en_core_web_sm", disable=["ner"])
 embedder = SentenceTransformer('all-mpnet-base-v2')
-
-DB_PATH = "tag_trail_memory.db"
 
 MIN_BLOCKLIST = {
     "introduction", "abstract", "summary", "conclusion", "discussion",
@@ -36,57 +43,43 @@ TECH_PATTERNS = [
 ]
 
 
-# --- Database & Memory Operations ---
+# --- MongoDB Database & Memory Operations ---
+
 def init_db():
-    """Initializes the SQLite database with a timestamp for smart pruning."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS tag_freq (
-            phrase TEXT PRIMARY KEY, 
-            frequency INTEGER DEFAULT 0,
-            last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-    conn.commit()
-    conn.close()
+    """MongoDB creates collections automatically, so this is now a placeholder."""
+    pass
 
 def prune_database(days_old=30):
-    """Deletes tags that haven't been seen recently so the AI can forget old habits."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+    """Deletes tags that haven't been seen recently from the cloud so the AI forgets old habits."""
     cutoff_date = datetime.now() - timedelta(days=days_old)
-    cursor.execute("DELETE FROM tag_freq WHERE last_seen < ?", (cutoff_date,))
-    conn.commit()
-    conn.close()
+    # MongoDB natively understands Python datetime objects!
+    collection.delete_many({"last_seen": {"$lt": cutoff_date}})
 
 def get_df_counts(candidate_list):
-    """Retrieves the frequency counts of candidate tags to calculate rareness penalties."""
+    """Retrieves the frequency counts of candidate tags from MongoDB to calculate rareness penalties."""
     if not candidate_list: 
         return {}
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    placeholders = ','.join(['?'] * len(candidate_list))
-    cursor.execute(f"SELECT phrase, frequency FROM tag_freq WHERE phrase IN ({placeholders})", candidate_list)
-    results = dict(cursor.fetchall())
-    conn.close()
-    return {phrase: results.get(phrase, 0) for phrase in candidate_list}
+    
+    # Ask MongoDB to find any document where the phrase is in our candidate list
+    results = collection.find({"phrase": {"$in": candidate_list}})
+    
+    # Convert the results into a fast lookup dictionary
+    df_counts = {doc["phrase"]: doc.get("frequency", 0) for doc in results}
+    
+    # Ensure all candidates are returned (default to 0 if not found in the DB)
+    return {phrase: df_counts.get(phrase, 0) for phrase in candidate_list}
 
 def update_df_counts(winning_tags):
-    """Updates the frequency and 'last_seen' timestamp of the final selected tags."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+    """Updates the frequency and 'last_seen' timestamp of the final selected tags in MongoDB."""
     for tag in winning_tags:
-        cursor.execute('''
-            INSERT INTO tag_freq (phrase, frequency, last_seen) 
-            VALUES (?, 1, CURRENT_TIMESTAMP) 
-            ON CONFLICT(phrase) 
-            DO UPDATE SET 
-                frequency = frequency + 1,
-                last_seen = CURRENT_TIMESTAMP
-        ''', (tag,))
-    conn.commit()
-    conn.close()
+        collection.update_one(
+            {"phrase": tag}, # Find the document with this phrase
+            {
+                "$inc": {"frequency": 1},               # Increase frequency by 1
+                "$set": {"last_seen": datetime.now()}   # Update the timestamp
+            },
+            upsert=True # If the phrase doesn't exist yet, create it!
+        )
 
 
 # --- Text Extraction & Cleaning ---
