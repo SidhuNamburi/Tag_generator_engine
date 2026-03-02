@@ -15,7 +15,7 @@ from pymongo import MongoClient
 
 # 1. Connect to MongoDB Cloud
 # Make sure to replace <> with your actual database password!
-MONGO_URI = "mongodb+srv://sidhunamburi05_db_user:hL7jhKP4cFgv3gap@cluster0.slua3xp.mongodb.net/?appName=Cluster0"
+MONGO_URI = "mongodb+srv://sidhunamburi05_db_user:passwordgap@cluster0.slua3xp.mongodb.net/?appName=Cluster0"
 client = MongoClient(MONGO_URI)
 
 # 2. Select the database and collection
