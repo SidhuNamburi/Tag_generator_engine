@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "TagAndTrail",
+    "slug": "tagandtrail",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#0B1829"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.tagandtrail.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0B1829"
+      },
+      "package": "com.tagandtrail.app"
+    },
+    "plugins": [
+      "expo-web-browser"
+    ]
+  }
+}

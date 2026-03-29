@@ -1,0 +1,25 @@
+# Master Gitignore
+
+# Node & Expo Junk
+node_modules/
+.expo/
+npm-debug.log
+
+# Python Junk
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Environment Variables (Keep these secret!)
+.env
+.env.local
+
+# Local Uploads/Downloads (Don't push test PDFs to GitHub)
+downloads/
+local_downloads/
+local_uploads/
+
+# OS Junk
+.DS_Store
+Thumbs.db
