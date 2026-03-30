@@ -3,8 +3,7 @@ import {
   View, Text, TouchableOpacity, StyleSheet,
   ActivityIndicator, TextInput, ViewStyle, Platform,
 } from 'react-native';
-import { COLORS, FONTS, RADIUS, SHADOW } from '../constants/theme';
-import { SafetyStatus } from '../types';
+import { SafetyStatus } from '../types/types';
 
 // ─── SafeBadge ────────────────────────────────────────────────────────────────
 export const SafeBadge: React.FC<{ status?: SafetyStatus | string }> = ({ status }) => {

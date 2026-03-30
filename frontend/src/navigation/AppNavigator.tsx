@@ -23,7 +23,7 @@ import {
 } from '../screens/OtherScreens';
 import SplashScreen from '../screens/SplashScreen';
 import { COLORS } from '../constants/theme';
-import { RootStackParamList, DrawerParamList } from '../types';
+import { RootStackParamList, DrawerParamList } from '../types/types';
 
 const Drawer = createDrawerNavigator<DrawerParamList>();
 const Stack  = createNativeStackNavigator<RootStackParamList>();

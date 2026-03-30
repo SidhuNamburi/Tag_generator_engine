@@ -170,7 +170,7 @@ app.put('/api/documents/trash/:docId', async (req, res) => {
       previousCategory: doc.category, // Capture the memory
       category: 'Trash',
       trashedAt: new Date() 
-    }, { new: true });
+    }, { returnDocument: 'after' });
 
     res.json(updatedDoc);
   } catch (error) {
