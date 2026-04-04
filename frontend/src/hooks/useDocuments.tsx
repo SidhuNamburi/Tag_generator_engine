@@ -24,6 +24,8 @@ interface DocumentContextType {
   markAsRecent: (doc: any) => void;
   logs: any[];
   addLog: (log: any) => void;
+  // 👇 NEW: Add switchUser to the interface 👇
+  switchUser: (newUserId: string | null) => Promise<void>;
 }
 
 // ─── The Global Context (The Brain) ─────────────────────────────────────────
@@ -122,6 +124,23 @@ export const DocumentProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setLoading(false);
     }
   };
+
+  // 👇 NEW: The switchUser function to securely handle logins/logouts 👇
+  const switchUser = async (newUserId: string | null) => {
+    setUserId(newUserId);
+    if (newUserId) {
+      setLoading(true);
+      await fetchAllData(newUserId);
+      setLoading(false);
+    } else {
+      // If logging out, wipe everything from memory
+      setDocs({ Public: [], Private: [], Restricted: [], Trash: [] });
+      setRecent([]);
+      setServerStats({});
+      setLogs([]);
+    }
+  };
+  // 👆 END NEW FUNCTION 👆
 
   // ─── DYNAMIC STATS ────────────────────────────────────────────────────────
   const allActiveDocs = [...docs.Public, ...docs.Private, ...docs.Restricted];
@@ -234,7 +253,9 @@ export const DocumentProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       emptyTrash, 
       markAsRecent,
       logs,
-      addLog 
+      addLog,
+      // 👇 NEW: Expose switchUser to the rest of the app 👇
+      switchUser
     }}>
       {children}
     </DocumentContext.Provider>

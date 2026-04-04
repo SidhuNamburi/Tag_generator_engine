@@ -6,7 +6,7 @@ import {
 import { DrawerContentComponentProps } from '@react-navigation/drawer';
 import { Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
+import { useDocuments } from '../hooks/useDocuments';
 const MAIN_MENU = [
   { key: 'Dashboard', label: 'Home',  icon: 'home' },
   { key: 'Stats',     label: 'Stats', icon: 'bar-chart-2' },
@@ -23,6 +23,7 @@ const DrawerContent: React.FC<DrawerContentComponentProps> = ({ navigation, stat
   };
 
   // ─── LOGOUT HANDLER ───
+  const { switchUser } = useDocuments();
   const handleLogout = () => {
     Alert.alert(
       "Log Out",
@@ -36,7 +37,7 @@ const DrawerContent: React.FC<DrawerContentComponentProps> = ({ navigation, stat
             try {
               // 1. Wipe the user ID from phone memory
               await AsyncStorage.removeItem('userId');
-              
+              await switchUser(null);
               // 2. Close the drawer
               navigation.closeDrawer();
               

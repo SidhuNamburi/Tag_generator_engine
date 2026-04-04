@@ -6,10 +6,10 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-
+import { useDocuments } from '../hooks/useDocuments';
 const LoginScreen = ({ navigation }: any) => {
   const insets = useSafeAreaInsets();
-  
+  const { switchUser } = useDocuments();
   // ─── FORM STATE ───
   const [isLogin, setIsLogin] = useState(true);
   const [phone, setPhone] = useState('');
@@ -135,6 +135,7 @@ const LoginScreen = ({ navigation }: any) => {
       if (response.ok) {
         console.log(`✅ Success! User Data:`, data);
         await AsyncStorage.setItem('userId', data._id);
+        await switchUser(data._id);
         navigation.replace('Splash'); 
       } else {
         setError(data.error || "Authentication failed");

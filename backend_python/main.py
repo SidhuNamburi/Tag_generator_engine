@@ -1,3 +1,4 @@
+import os
 import requests
 import datetime
 from pymongo import MongoClient
@@ -219,8 +220,10 @@ def classify_message(data):
 
 
 def run():
-    server = HTTPServer(("0.0.0.0", 8000), WhatsAppHandler)
-    print("Tag & Trail Server running on port 8000")
+    # Fetch the dynamically assigned port from the environment, default to 8000 if running locally
+    port = int(os.environ.get("PORT", 8000))
+    server = HTTPServer(("0.0.0.0", port), WhatsAppHandler)
+    print(f"☁️ Tag & Trail Python Server running on port {port}")
     server.serve_forever()
 
 if __name__ == "__main__":

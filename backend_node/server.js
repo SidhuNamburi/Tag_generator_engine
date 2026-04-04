@@ -34,6 +34,12 @@ io.on('connection', (socket) => {
 app.use(cors()); 
 app.use(express.json()); 
 
+// ─── NGROK BYPASS ───
+app.use((req, res, next) => {
+  res.setHeader('ngrok-skip-browser-warning', 'true');
+  next();
+});
+
 // ─── DATABASE CONNECTION ───
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('✅ Connected to MongoDB Atlas!'))
@@ -117,6 +123,7 @@ app.get('/api/documents/category/:userId/:category', async (req, res) => {
 app.get('/api/documents/recent/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
+    console.log(`🚨 React Native is asking for documents belonging to: ${userId}`);
     const docs = await Document.find({ 
       userId, 
       category: { $ne: 'Trash' } 
@@ -259,6 +266,6 @@ app.post('/api/ai/webhook', (req, res) => {
 
 // ─── START SERVER ───
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => {
+server.listen(PORT,'0.0.0.0', () => {
   console.log(`🚀 TagAndTrail Backend (with WebSockets) running on port ${PORT}`);
 });
