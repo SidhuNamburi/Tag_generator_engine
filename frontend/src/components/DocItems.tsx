@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Modal, Linking, Share, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Modal, Share, Alert } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
 // 1. Import the Brain!
@@ -15,14 +15,27 @@ const fmt = (d) => {
   } catch { return d || 'Unknown date'; }
 };
 
+// 👇 UPGRADE 1: Dynamic Tag Color Generator
+const getTagColor = (tag) => {
+  const colors = [
+    { bg: 'rgba(96, 165, 250, 0.15)', text: '#60A5FA', border: 'rgba(96, 165, 250, 0.4)' },  // Blue
+    { bg: 'rgba(192, 132, 252, 0.15)', text: '#C084FC', border: 'rgba(192, 132, 252, 0.4)' }, // Purple
+    { bg: 'rgba(251, 146, 60, 0.15)', text: '#FB923C', border: 'rgba(251, 146, 60, 0.4)' },   // Orange
+    { bg: 'rgba(74, 222, 128, 0.15)', text: '#4ADE80', border: 'rgba(74, 222, 128, 0.4)' },  // Green
+    { bg: 'rgba(245, 209, 176, 0.15)', text: '#F5D1B0', border: 'rgba(245, 209, 176, 0.4)' }, // Brand Peach
+  ];
+  // Simple hash to ensure the same tag always gets the same color!
+  const hash = tag.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  return colors[hash % colors.length];
+};
+
 // ─── Shared Action Modal ──────────────────────────────────────────────────────
 const ActionModal = ({ visible, onClose, item, type, onDelete }) => {
   if (!item) return null;
 
   const docTitle = item.title || 'Document';
-  const docUrl = item.contentUrl || 'https://google.com'; // Mapped to MongoDB
+  const docUrl = item.contentUrl || 'https://google.com';
 
-  // 👇 THE MAGIC HAPPENS HERE: Updated to use In-App Browser & Google Viewer
   const handleOpen = async () => {
     try {
       let finalUrl = docUrl;
@@ -30,10 +43,8 @@ const ActionModal = ({ visible, onClose, item, type, onDelete }) => {
       const isWebLink = docUrl.startsWith('http') && !isFile;
 
       if (isFile) {
-        // Wrap files in Google Viewer to prevent downloading
         finalUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(docUrl)}&embedded=true`;
       } else if (isWebLink) {
-        // Regular links open as normal
         finalUrl = docUrl;
       }
 
@@ -105,17 +116,31 @@ const ActionModal = ({ visible, onClose, item, type, onDelete }) => {
 
 // ─── LinkItem ─────────────────────────────────────────────────────────────────
 export const LinkItem = ({ item }) => {
+
+  // 👇 DROP THIS LOG RIGHT HERE
+  console.log(`\n=== TAG DATA FOR: ${item.title} ===`);
+  console.log("Raw tags:", item.tags);
+  console.log("Data type:", typeof item.tags);
+  console.log("Is Array?", Array.isArray(item.tags));
+  
+  // ... rest of your component
   const [modalVisible, setModalVisible] = useState(false);
-  const { deleteToTrash } = useDocuments();
+  // 👇 UPGRADE 2: Pulled markAsRecent from the Brain
+  const { deleteToTrash, markAsRecent } = useDocuments();
   const tags = item.tags || [];
   
-  // Dynamic Security Logic mapped to MongoDB
   const isFlagged = item.security_status === 'flagged';
   const pillColor = isFlagged ? '#FF8484' : '#4ADE80';
+
+  // 👇 UPGRADE 2: Hyper-sensitive touch handler
+  const handlePress = () => {
+    markAsRecent(item); 
+    setModalVisible(true);
+  };
   
   return (
     <>
-      <TouchableOpacity style={s.card} onPress={() => setModalVisible(true)} activeOpacity={0.7}>
+      <TouchableOpacity style={s.card} onPress={handlePress} activeOpacity={0.7}>
         <View style={s.row}>
           <View style={s.iconWrap}><Feather name="link" size={20} color="#2D464C" /></View>
           <View style={s.body}>
@@ -124,7 +149,15 @@ export const LinkItem = ({ item }) => {
           </View>
         </View>
         <View style={s.tagsRow}>
-          {tags.slice(0, 3).map((t, i) => <View key={i} style={s.tagPill}><Text style={s.tagText}>{t}</Text></View>)}
+          {/* 👇 UPGRADE 1: Injecting dynamic color styles */}
+          {tags.slice(0, 3).map((t, i) => {
+            const theme = getTagColor(t);
+            return (
+              <View key={i} style={[s.tagPill, { backgroundColor: theme.bg, borderColor: theme.border }]}>
+                <Text style={[s.tagText, { color: theme.text }]}>#{t}</Text>
+              </View>
+            )
+          })}
           <View style={{ flex: 1 }} />
           <View style={[s.safePill, { borderColor: `rgba(${isFlagged ? '255, 132, 132' : '74, 222, 128'}, 0.5)` }]}>
             <Text style={[s.safeTxt, { color: pillColor }]}>{isFlagged ? 'FLAGGED' : 'SAFE'}</Text>
@@ -139,17 +172,23 @@ export const LinkItem = ({ item }) => {
 // ─── PDFItem ──────────────────────────────────────────────────────────────────
 export const PDFItem = ({ item }) => {
   const [modalVisible, setModalVisible] = useState(false);
-  const { deleteToTrash } = useDocuments();
+  // 👇 UPGRADE 2: Pulled markAsRecent
+  const { deleteToTrash, markAsRecent } = useDocuments();
   const tags = item.tags || [];
   
-  // Dynamic Security & Encryption Logic
   const isFlagged = item.security_status === 'flagged';
   const isEncrypted = item.metadata?.model_prediction?.prediction === 'encrypted';
   const pillColor = isFlagged ? '#FF8484' : '#4ADE80';
+
+  // 👇 UPGRADE 2: Hyper-sensitive touch handler
+  const handlePress = () => {
+    markAsRecent(item); 
+    setModalVisible(true);
+  };
   
   return (
     <>
-      <TouchableOpacity style={s.card} onPress={() => setModalVisible(true)} activeOpacity={0.7}>
+      <TouchableOpacity style={s.card} onPress={handlePress} activeOpacity={0.7}>
         <View style={s.row}>
           <View style={[s.iconWrap, { backgroundColor: '#FF8484' }]}>
             {isEncrypted ? <Feather name="lock" size={20} color="#FFFFFF" /> : <Feather name="file-text" size={20} color="#FFFFFF" />}
@@ -160,7 +199,15 @@ export const PDFItem = ({ item }) => {
           </View>
         </View>
         <View style={s.tagsRow}>
-          {tags.slice(0, 3).map((t, i) => <View key={i} style={s.tagPill}><Text style={s.tagText}>{t}</Text></View>)}
+          {/* 👇 UPGRADE 1: Injecting dynamic color styles */}
+          {tags.slice(0, 3).map((t, i) => {
+            const theme = getTagColor(t);
+            return (
+              <View key={i} style={[s.tagPill, { backgroundColor: theme.bg, borderColor: theme.border }]}>
+                <Text style={[s.tagText, { color: theme.text }]}>#{t}</Text>
+              </View>
+            )
+          })}
           <View style={{ flex: 1 }} />
           <View style={[s.safePill, { borderColor: `rgba(${isFlagged ? '255, 132, 132' : '74, 222, 128'}, 0.5)` }]}>
             <Text style={[s.safeTxt, { color: pillColor }]}>{isFlagged ? 'RESTRICTED' : 'SAFE'}</Text>
@@ -175,14 +222,21 @@ export const PDFItem = ({ item }) => {
 // ─── RecentDocItem ────────────────────────────────────────────────────────────
 export const RecentDocItem = ({ item }) => {
   const [modalVisible, setModalVisible] = useState(false);
-  const { deleteToTrash } = useDocuments();
+  // 👇 UPGRADE 2: Pulled markAsRecent
+  const { deleteToTrash, markAsRecent } = useDocuments();
 
   const isFlagged = item.security_status === 'flagged';
   const pillColor = isFlagged ? '#FF8484' : '#4ADE80';
 
+  // 👇 UPGRADE 2: Hyper-sensitive touch handler
+  const handlePress = () => {
+    markAsRecent(item); 
+    setModalVisible(true);
+  };
+
   return (
     <>
-      <TouchableOpacity style={s.recentCard} onPress={() => setModalVisible(true)} activeOpacity={0.7}>
+      <TouchableOpacity style={s.recentCard} onPress={handlePress} activeOpacity={0.7}>
         <View style={s.recentRow}>
           <View style={[s.iconWrap, item.type === 'pdf' ? { backgroundColor: '#FF8484' } : {}]}>
             <Feather name={item.type === 'pdf' ? 'file-text' : 'link'} size={18} color={item.type === 'pdf' ? '#FFFFFF' : '#2D464C'} />
@@ -217,8 +271,9 @@ const s = StyleSheet.create({
   score:      { fontSize: 20, fontWeight: '900', color: '#FFFFFF' },
   scoreLbl:   { fontSize: 9, color: 'rgba(255,255,255,0.5)', fontWeight: '800', marginTop: 2, letterSpacing: 0.5 },
   tagsRow:    { flexDirection: 'row', flexWrap: 'wrap', marginTop: 18, alignItems: 'center', gap: 8 },
-  tagPill:    { backgroundColor: 'rgba(255,255,255,0.08)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
-  tagText:    { color: '#FFFFFF', fontSize: 10, fontWeight: '700', opacity: 0.9 },
+  // 👇 UPGRADE 1: Added borderWidth so the dynamic borders show up!
+  tagPill:    { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1 },
+  tagText:    { fontSize: 11, fontWeight: '800', letterSpacing: 0.5 },
   safePill:   { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(74, 222, 128, 0.5)' },
   safeTxt:    { color: '#4ADE80', fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },

@@ -14,15 +14,28 @@ client = MongoClient(MONGO_URI)
 db = client.get_database('test')
 
 def get_semantic_tags(title: str, text: str): 
-    
+    print(f"\n🧠 [TAG ENGINE] Triggered! Sending Title: '{title}' | Text Length: {len(text)}")
     try:
         payload = {"title": title if title else "WhatsApp", "text": text}
         headers = {"Content-Type": "application/json", "X-API-Key": TAG_ENGINE_KEY}
-        res = requests.post(TAG_ENGINE_URL, json=payload, headers=headers, timeout=10)
+        
+        res = requests.post(TAG_ENGINE_URL, json=payload, headers=headers, timeout=15)
+        print(f"🧠 [TAG ENGINE] HTTP Status Code: {res.status_code}")
+        
         if res.status_code == 200:
-            return res.json().get("tags", [])
-    except:
-        pass # If it fails, we just silently return empty tags so it doesn't crash the bot
+            data = res.json()
+            print(f"🧠 [TAG ENGINE] Raw JSON Response: {data}")
+            
+            # This is where the bug likely is. Is it called "tags", "Tags", or something else?
+            tags = data.get("tags", [])
+            print(f"🧠 [TAG ENGINE] Extracted Tags Array: {tags}\n")
+            return tags
+        else:
+            print(f"❌ [TAG ENGINE] API Error Text: {res.text}\n")
+            
+    except Exception as e:
+        print(f"❌ [TAG ENGINE] Crash/Timeout Exception: {str(e)}\n")
+        
     return []
 
 class WhatsAppHandler(BaseHTTPRequestHandler):
@@ -55,11 +68,15 @@ class WhatsAppHandler(BaseHTTPRequestHandler):
             tag_text = result.get("content", "")
             tag_title = tag_text[:30]
 
-        # Call your engine and append the tags to the result
+       # Call your engine and append the tags to the result
+        print(f"🔎 [DEBUG PRE-TAG] Extracted tag_text: '{tag_text}' (Length: {len(tag_text) if tag_text else 0})")
+        
         if tag_text and len(tag_text.strip()) > 5:
             tags = get_semantic_tags(tag_title, tag_text)
             if tags:
                 result["semantic_tags"] = tags
+        else:
+            print("⚠️ [DEBUG] Skipped Tag Engine: tag_text was empty or too short!")
         # ==========================================
         # --- END OF NEW ADDITION ---
         # ==========================================

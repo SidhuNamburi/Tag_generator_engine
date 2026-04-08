@@ -156,11 +156,24 @@ export const DocumentProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   // ─── THE STACK LOGIC ──────────────────────────────────────────────────────
-  const markAsRecent = (doc: any) => {
+  // ─── THE STACK LOGIC (Optimistic UI + Silent Sync) ────────────────────────
+  const markAsRecent = async (doc: any) => {
+    // 1. Instantly update the UI so it feels lightning fast to the user
     setRecent(prevStack => {
       const filteredStack = prevStack.filter(d => d._id !== doc._id);
       return [doc, ...filteredStack].slice(0, 10);
     });
+
+    // 2. Silently tell the Node.js server to update the 'lastViewed' timestamp in MongoDB
+    if (!userId) return;
+    try {
+      // Note: Adjust this URL to match whatever your actual update endpoint is!
+      await fetch(`${API_URL}/api/documents/viewed/${doc._id}`, { 
+        method: 'PUT' 
+      });
+    } catch (error) {
+      console.log("Failed to sync recent document with server", error);
+    }
   };
 
   // ─── THE GLOBAL ACTIONS (Optimistic UI + API Sync) ────────────────────────
