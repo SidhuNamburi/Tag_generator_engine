@@ -5,6 +5,13 @@ const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const http = require('http');
 const { Server } = require('socket.io');
+
+// 👇 NEW IMPORTS FOR MANUAL UPLOAD
+const fs = require('fs');
+const multer = require('multer');
+const axios = require('axios');
+const cloudinary = require('cloudinary').v2;
+
 // Import our new Blueprints (Models)
 const User = require('./models/User');
 const Document = require('./models/Document');
@@ -24,21 +31,28 @@ const io = new Server(server, {
 // Just to log when the app connects or disconnects
 io.on('connection', (socket) => {
   console.log(`🔌 Frontend connected to Loudspeaker: ${socket.id}`);
-  
+
   socket.on('disconnect', () => {
     console.log(`🛑 Frontend disconnected: ${socket.id}`);
   });
 });
 
-
-app.use(cors()); 
-app.use(express.json()); 
+app.use(cors());
+app.use(express.json());
 
 // ─── NGROK BYPASS ───
 app.use((req, res, next) => {
   res.setHeader('ngrok-skip-browser-warning', 'true');
   next();
 });
+
+// 👇 CLOUDINARY & MULTER CONFIG
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+});
+const upload = multer({ dest: 'uploads/' });
 
 // ─── DATABASE CONNECTION ───
 mongoose.connect(process.env.MONGO_URI)
@@ -53,7 +67,7 @@ mongoose.connect(process.env.MONGO_URI)
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { phoneNumber, password } = req.body;
-    
+
     if (!phoneNumber || !password) {
       return res.status(400).json({ error: "Phone number and password are required" });
     }
@@ -68,7 +82,7 @@ app.post('/api/auth/register', async (req, res) => {
 
     user = new User({ phoneNumber, password: hashedPassword });
     await user.save();
-    
+
     console.log(`✨ New user created: ${phoneNumber}`);
     res.json({ _id: user._id, phoneNumber: user.phoneNumber });
 
@@ -124,11 +138,11 @@ app.get('/api/documents/recent/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
     console.log(`🚨 React Native is asking for documents belonging to: ${userId}`);
-    const docs = await Document.find({ 
-      userId, 
-      category: { $ne: 'Trash' } 
+    const docs = await Document.find({
+      userId,
+      category: { $ne: 'Trash' }
     }).sort({ createdAt: -1 }).limit(10);
-    
+
     res.json(docs);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch recent documents" });
@@ -168,15 +182,15 @@ app.put('/api/documents/trash/:docId', async (req, res) => {
   try {
     const { docId } = req.params;
     const doc = await Document.findById(docId);
-    
+
     if (!doc) return res.status(404).json({ error: "Not found" });
 
     console.log(`🗑️ Trashing: ${doc.title} | Original Category: ${doc.category}`);
 
-    const updatedDoc = await Document.findByIdAndUpdate(docId, { 
+    const updatedDoc = await Document.findByIdAndUpdate(docId, {
       previousCategory: doc.category, // Capture the memory
       category: 'Trash',
-      trashedAt: new Date() 
+      trashedAt: new Date()
     }, { returnDocument: 'after' });
 
     res.json(updatedDoc);
@@ -190,7 +204,7 @@ app.put('/api/documents/restore/:docId', async (req, res) => {
   try {
     const { docId } = req.params;
     const doc = await Document.findById(docId);
-    
+
     if (!doc) return res.status(404).json({ error: "Not found" });
 
     // 1. If flagged -> ALWAYS Restricted
@@ -202,17 +216,18 @@ app.put('/api/documents/restore/:docId', async (req, res) => {
 
     console.log(`♻️ Restoring: ${doc.title} | Status: ${doc.security_status} | Sending to: ${target}`);
 
-    await Document.findByIdAndUpdate(docId, { 
+    await Document.findByIdAndUpdate(docId, {
       category: target,
       trashedAt: null,
-      previousCategory: null 
+      previousCategory: null
     });
-    
+
     res.json({ message: "Success", category: target });
   } catch (error) {
     res.status(500).json({ error: "Restore failed" });
   }
 });
+
 // 8. PERMANENT DELETE (Single Document)
 app.delete('/api/documents/:docId', async (req, res) => {
   try {
@@ -236,7 +251,74 @@ app.delete('/api/documents/empty-trash/:userId', async (req, res) => {
   }
 });
 
-// 10. AI WEBHOOK (The "Loudspeaker" for Python)
+// 👇 THE NEW ROUTE: 10. MANUAL UPLOAD RELAY
+app.post('/api/documents/manual-upload', upload.single('file'), async (req, res) => {
+  try {
+    const { userId, type, url } = req.body;
+    let finalUrl = url;
+
+    // If it's a PDF, upload it to Cloudinary first
+    // If it's a PDF, upload it to Cloudinary first
+    if (type === 'pdf' && req.file) {
+      console.log("📥 Catching PDF from App, uploading to Cloudinary...");
+      
+      // 👇 FIX: Force Node to wait for the final receipt using a Promise
+      const cloudRes = await new Promise((resolve, reject) => {
+        cloudinary.uploader.upload_large(
+          req.file.path, 
+          { resource_type: "raw" }, 
+          function(error, result) {
+            if (error) {
+              console.error("☁️ Cloudinary Upload Error:", error);
+              reject(error);
+            } else {
+              resolve(result);
+            }
+          }
+        );
+      });
+      
+      console.log("☁️ Cloudinary URL:", cloudRes.secure_url);
+      finalUrl = cloudRes.secure_url;
+      
+      // Delete the temp file off the Node server to save space
+      fs.unlinkSync(req.file.path);
+    }
+
+    // Prepare the clean JSON payload for Python
+    const pythonPayload = {
+      userId: userId,
+      type: type,
+      url: finalUrl
+    };
+
+    console.log("🚀 Firing payload to Python AI Engine:", pythonPayload);
+
+    // Make sure this matches your deployed Python Server!
+    const PYTHON_RENDER_URL = 'https://tag-generator-engine.onrender.com/manual';
+
+    console.log("⏳ Waiting for Python Server to respond...");
+    try {
+      const pythonRes = await axios.post(PYTHON_RENDER_URL, pythonPayload);
+      console.log(`✅ Python replied with Status ${pythonRes.status}:`, pythonRes.data);
+      res.status(200).json({ message: "Sent to AI Engine successfully" });
+    } catch (axiosErr) {
+      if (axiosErr.response) {
+        console.log(`❌ Python rejected the ping! Status: ${axiosErr.response.status}`);
+        console.log("❌ Render Error Data:", axiosErr.response.data);
+      } else {
+        console.log("❌ Node couldn't even reach Render:", axiosErr.message);
+      }
+      res.status(500).json({ error: "Python server rejected the request" });
+    }
+
+  } catch (error) {
+    console.error("❌ Manual upload failed:", error);
+    res.status(500).json({ error: "Server error during upload" });
+  }
+});
+
+// 11. AI WEBHOOK (The "Loudspeaker" for Python)
 app.post('/api/ai/webhook', (req, res) => {
   try {
     // Python will send these details in its POST request
@@ -266,6 +348,6 @@ app.post('/api/ai/webhook', (req, res) => {
 
 // ─── START SERVER ───
 const PORT = process.env.PORT || 5000;
-server.listen(PORT,'0.0.0.0', () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 TagAndTrail Backend (with WebSockets) running on port ${PORT}`);
 });
