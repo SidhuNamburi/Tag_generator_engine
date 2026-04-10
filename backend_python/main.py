@@ -159,59 +159,65 @@ def run_ai_pipeline(result, user):
 class WhatsAppHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
-        content_length = int(self.headers['Content-Length'])
-        body = self.rfile.read(content_length)
-
-        # ------------------------------------------
-        # DOOR 1: NATIVE APP MANUAL UPLOAD
-        # ------------------------------------------
-        if self.path == '/manual':
-            print("\n🚪 [DOOR 1] App Manual Upload Received!")
-            try:
-                # Expecting a JSON payload from your Node.js or React Native app
-                data = json.loads(body.decode('utf-8'))
-                user_id = data.get("userId")
-                item_type = data.get("type") # "link" or "pdf"
-                url = data.get("url") # Standard web link OR a Cloudinary temp link for PDFs
-                
-                print(f"🔍 Looking up user ID: {user_id}")
-                user = db.users.find_one({"_id": ObjectId(user_id)})
-
-                if not user:
-                    print("⚠️ ERROR: User not found in DB.")
-                    self.send_response(404)
-                    self.end_headers()
-                    return
-
-                print("✅ User found! Sending to ML Helpers...")
-                
-                # Pass it exactly through your existing ML helpers so it runs VT and HF
-                if item_type == "pdf":
-                    # Pass auth=None because it's coming from Cloudinary/App, not Twilio
-                    result = send_media_to_hf(url, "application/pdf", "pdf", auth=None)
-                else:
-                    result = send_text_to_hf(url)
-
-                # Send it to the master pipeline
-                run_ai_pipeline(result, user)
-
-                # Respond to the app immediately
-                self.send_response(200)
-                self.send_header('Content-type', 'application/json')
-                self.end_headers()
-                self.wfile.write(json.dumps({"status": "success", "message": "Processed successfully"}).encode())
-
-            except Exception as e:
-                print(f"❌ Manual Upload Failed: {str(e)}")
-                self.send_response(500)
-                self.end_headers()
-            return
-
-        # ------------------------------------------
-        # DOOR 2: TWILIO WHATSAPP WEBHOOK
-        # ------------------------------------------
-        print("\n🚪 [DOOR 2] Twilio Webhook Received!")
         try:
+            content_length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(content_length)
+
+            # ------------------------------------------
+            # DOOR 1: NATIVE APP MANUAL UPLOAD
+            # ------------------------------------------
+            # 👇 FIX 1: More forgiving path matching!
+            if '/manual' in self.path:  
+                print("\n🚪 [DOOR 1] App Manual Upload Received!")
+                try:
+                    data = json.loads(body.decode('utf-8'))
+                    # 👇 FIX 2: X-Ray vision to see exactly what Node is sending!
+                    print(f"📦 RAW Payload received from Node: {data}") 
+
+                    user_id = data.get("userId")
+                    item_type = data.get("type")
+                    url = data.get("url")
+                    
+                    # 👇 FIX 3: Safe exit if Node forgot the User ID
+                    if not user_id:
+                        print("⚠️ ERROR: No userId provided in the payload.")
+                        self.send_response(400)
+                        self.end_headers()
+                        return
+
+                    print(f"🔍 Looking up user ID: {user_id}")
+                    user = db.users.find_one({"_id": ObjectId(user_id)})
+
+                    if not user:
+                        print("⚠️ ERROR: User not found in DB.")
+                        self.send_response(404)
+                        self.end_headers()
+                        return
+
+                    print("✅ User found! Sending to ML Helpers...")
+                    
+                    if item_type == "pdf":
+                        result = send_media_to_hf(url, "application/pdf", "pdf", auth=None)
+                    else:
+                        result = send_text_to_hf(url)
+
+                    run_ai_pipeline(result, user)
+
+                    self.send_response(200)
+                    self.send_header('Content-type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"status": "success", "message": "Processed successfully"}).encode())
+
+                except Exception as e:
+                    print(f"❌ DOOR 1 Crash: {str(e)}")
+                    self.send_response(500)
+                    self.end_headers()
+                return
+
+            # ------------------------------------------
+            # DOOR 2: TWILIO WHATSAPP WEBHOOK
+            # ------------------------------------------
+            print("\n🚪 [DOOR 2] Twilio Webhook Received!")
             data = parse_qs(body.decode('utf-8'))
             data = {k: v[0] for k, v in data.items()}
 
@@ -224,21 +230,17 @@ class WhatsAppHandler(BaseHTTPRequestHandler):
             if user:
                 print("✅ User found! Sending to ML Helpers...")
                 result = classify_message(data)
-                
-                # Send it to the master pipeline
                 run_ai_pipeline(result, user)
             else:
                 print(f"⚠️ ERROR: User with phone {sender_phone} not found in DB.")
 
-            # Twilio requires a 200 OK immediately
             self.send_response(200)
             self.end_headers()
             
         except Exception as e:
-            print(f"❌ Twilio Processing Failed: {str(e)}")
+            print(f"❌ Global Server Crash: {str(e)}")
             self.send_response(500)
             self.end_headers()
-
 
 def classify_message(data):
     num_media = int(data.get("NumMedia", 0))
