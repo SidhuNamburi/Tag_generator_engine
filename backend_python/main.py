@@ -7,10 +7,19 @@ from pymongo import MongoClient
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs
 import threading
-import functools # 👇 ADD THIS IMPORT
+import sys
+import builtins
 
-# 👇 ADD THIS HACK: Force every print statement to flush to Render instantly
-print = functools.partial(print, flush=True)
+# 👇 THE ULTIMATE OVERRIDE: Force every print to hit Render's immediate error stream
+def force_print(*args, **kwargs):
+    kwargs['file'] = sys.stderr
+    kwargs['flush'] = True
+    builtins.print(*args, **kwargs)
+
+# Replace standard print with our aggressive one
+print = force_print 
+
+# ... the rest of your code ...
 
 # Cleaned up: Importing lightweight delegation functions instead of heavy ML processors
 from helpers import send_media_to_hf, send_text_to_hf
