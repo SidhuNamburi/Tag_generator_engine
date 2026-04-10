@@ -158,6 +158,15 @@ def run_ai_pipeline(result, user):
 # --- THE SERVER HANDLER (TWO DOORS) ---
 # ==========================================
 class WhatsAppHandler(BaseHTTPRequestHandler):
+    def do_HEAD(self):
+        self.send_response(200)
+        self.end_headers()
+
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'application/json')
+        self.end_headers()
+        self.wfile.write(json.dumps({"status": "awake", "message": "AI Engine is Live!"}).encode())
 
     def do_POST(self):
         try:
