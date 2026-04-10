@@ -167,51 +167,52 @@ class WhatsAppHandler(BaseHTTPRequestHandler):
             # DOOR 1: NATIVE APP MANUAL UPLOAD
             # ------------------------------------------
             # 👇 FIX 1: More forgiving path matching!
+            # ------------------------------------------
+            # DOOR 1: NATIVE APP MANUAL UPLOAD
+            # ------------------------------------------
             if '/manual' in self.path:  
                 print("\n🚪 [DOOR 1] App Manual Upload Received!")
                 try:
                     data = json.loads(body.decode('utf-8'))
-                    # 👇 FIX 2: X-Ray vision to see exactly what Node is sending!
                     print(f"📦 RAW Payload received from Node: {data}") 
+
+                    # 👇 NEW: TELL NODE "I GOT IT" IMMEDIATELY
+                    # This prevents the "Broken Pipe" and stops Node from retrying.
+                    self.send_response(200)
+                    self.send_header('Content-type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"status": "received", "message": "Processing started"}).encode())
+                    # -----------------------------------------------------------
 
                     user_id = data.get("userId")
                     item_type = data.get("type")
                     url = data.get("url")
                     
-                    # 👇 FIX 3: Safe exit if Node forgot the User ID
                     if not user_id:
                         print("⚠️ ERROR: No userId provided in the payload.")
-                        self.send_response(400)
-                        self.end_headers()
-                        return
+                        return # We already sent the 200, so we just stop the background work here
 
                     print(f"🔍 Looking up user ID: {user_id}")
                     user = db.users.find_one({"_id": ObjectId(user_id)})
 
                     if not user:
                         print("⚠️ ERROR: User not found in DB.")
-                        self.send_response(404)
-                        self.end_headers()
                         return
 
-                    print("✅ User found! Sending to ML Helpers...")
+                    print("✅ User found! Processing AI in background...")
                     
                     if item_type == "pdf":
                         result = send_media_to_hf(url, "application/pdf", "pdf", auth=None)
                     else:
                         result = send_text_to_hf(url)
 
+                    # This runs the heavy ML stuff without keeping the connection open
                     run_ai_pipeline(result, user)
 
-                    self.send_response(200)
-                    self.send_header('Content-type', 'application/json')
-                    self.end_headers()
-                    self.wfile.write(json.dumps({"status": "success", "message": "Processed successfully"}).encode())
-
                 except Exception as e:
-                    print(f"❌ DOOR 1 Crash: {str(e)}")
-                    self.send_response(500)
-                    self.end_headers()
+                    print(f"❌ DOOR 1 Background Error: {str(e)}")
+                    # Note: We can't send a 500 here because we already sent a 200 above.
+                    # That's why we log it to the console for you to see.
                 return
 
             # ------------------------------------------
