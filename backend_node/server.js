@@ -301,7 +301,11 @@ app.post('/api/documents/manual-upload', upload.single('file'), async (req, res)
     while (retries > 0) {
       try {
         console.log(`⏳ Knocking on Python's door... (Retries left: ${retries})`);
-        pythonRes = await axios.post(PYTHON_RENDER_URL, pythonPayload);
+        
+        // 👇 FIX: The critical 10-second timeout. If Python takes longer than 10s to reply, 
+        // Node hangs up and immediately tries again instead of freezing!
+        pythonRes = await axios.post(PYTHON_RENDER_URL, pythonPayload, { timeout: 10000 });
+        
         break; // IT WORKED! Break out of the loop!
       } catch (axiosErr) {
         retries--;
@@ -311,7 +315,8 @@ app.post('/api/documents/manual-upload', upload.single('file'), async (req, res)
           return res.status(500).json({ error: "Python server failed to wake up after multiple attempts." });
         }
         
-        console.log("😴 Python is asleep. Waiting 8 seconds and knocking again...");
+        // This will now catch timeout errors AND 502 Bad Gateway errors
+        console.log(`😴 Python didn't answer (${axiosErr.code || axiosErr.message}). Waiting 8 seconds...`);
         // Wait exactly 8 seconds before looping again
         await new Promise(resolve => setTimeout(resolve, 8000));
       }

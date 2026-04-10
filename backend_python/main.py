@@ -6,6 +6,7 @@ from bson.objectid import ObjectId
 from pymongo import MongoClient
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs
+import threading
 
 # Cleaned up: Importing lightweight delegation functions instead of heavy ML processors
 from helpers import send_media_to_hf, send_text_to_hf
@@ -201,10 +202,17 @@ class WhatsAppHandler(BaseHTTPRequestHandler):
 
                     print("✅ User found! Processing AI in background...")
                     
-                    if item_type == "pdf":
-                        result = send_media_to_hf(url, "application/pdf", "pdf", auth=None)
-                    else:
-                        result = send_text_to_hf(url)
+                    def background_worker():
+                        try:
+                            if item_type == "pdf":
+                                result = send_media_to_hf(url, "application/pdf", "pdf", auth=None)
+                            else:
+                                result = send_text_to_hf(url)
+                            run_ai_pipeline(result, user)
+                        except Exception as thread_err:
+                            print(f"❌ Thread Error: {str(thread_err)}")
+
+                    threading.Thread(target=background_worker).start()
 
                     # This runs the heavy ML stuff without keeping the connection open
                     run_ai_pipeline(result, user)
