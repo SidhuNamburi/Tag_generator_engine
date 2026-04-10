@@ -7,6 +7,10 @@ from pymongo import MongoClient
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs
 import threading
+import functools # 👇 ADD THIS IMPORT
+
+# 👇 ADD THIS HACK: Force every print statement to flush to Render instantly
+print = functools.partial(print, flush=True)
 
 # Cleaned up: Importing lightweight delegation functions instead of heavy ML processors
 from helpers import send_media_to_hf, send_text_to_hf
