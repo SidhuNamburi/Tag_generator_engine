@@ -9,15 +9,20 @@ from urllib.parse import parse_qs
 import threading
 import sys
 import builtins
+import logging
 
-# 👇 THE ULTIMATE OVERRIDE: Force every print to hit Render's immediate error stream
-def force_print(*args, **kwargs):
-    kwargs['file'] = sys.stderr
-    kwargs['flush'] = True
-    builtins.print(*args, **kwargs)
+# 👇 THE FIX: Create a permanent, indestructible microphone to Render's console
+logging.basicConfig(
+    stream=sys.stdout, 
+    level=logging.INFO, 
+    format='%(message)s'
+)
 
-# Replace standard print with our aggressive one
-print = force_print 
+# Hijack every print statement so the background thread can speak
+def permanent_print(*args, **kwargs):
+    logging.info(" ".join(map(str, args)))
+
+builtins.print = permanent_print 
 
 # ... the rest of your code ...
 
