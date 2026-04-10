@@ -252,17 +252,16 @@ app.delete('/api/documents/empty-trash/:userId', async (req, res) => {
 });
 
 // 👇 THE NEW ROUTE: 10. MANUAL UPLOAD RELAY
+// 👇 THE NEW ROUTE: 10. MANUAL UPLOAD RELAY (WITH AGGRESSIVE RETRY)
 app.post('/api/documents/manual-upload', upload.single('file'), async (req, res) => {
   try {
     const { userId, type, url } = req.body;
     let finalUrl = url;
 
     // If it's a PDF, upload it to Cloudinary first
-    // If it's a PDF, upload it to Cloudinary first
     if (type === 'pdf' && req.file) {
       console.log("📥 Catching PDF from App, uploading to Cloudinary...");
       
-      // 👇 FIX: Force Node to wait for the final receipt using a Promise
       const cloudRes = await new Promise((resolve, reject) => {
         cloudinary.uploader.upload_large(
           req.file.path, 
@@ -293,24 +292,34 @@ app.post('/api/documents/manual-upload', upload.single('file'), async (req, res)
     };
 
     console.log("🚀 Firing payload to Python AI Engine:", pythonPayload);
-
-    // Make sure this matches your deployed Python Server!
     const PYTHON_RENDER_URL = 'https://tag-generator-engine.onrender.com/manual';
 
-    console.log("⏳ Waiting for Python Server to respond...");
-    try {
-      const pythonRes = await axios.post(PYTHON_RENDER_URL, pythonPayload);
-      console.log(`✅ Python replied with Status ${pythonRes.status}:`, pythonRes.data);
-      res.status(200).json({ message: "Sent to AI Engine successfully" });
-    } catch (axiosErr) {
-      if (axiosErr.response) {
-        console.log(`❌ Python rejected the ping! Status: ${axiosErr.response.status}`);
-        console.log("❌ Render Error Data:", axiosErr.response.data);
-      } else {
-        console.log("❌ Node couldn't even reach Render:", axiosErr.message);
+    // 🔥 THE TWILIO SECRET: Aggressive Retry Loop 🔥
+    let pythonRes = null;
+    let retries = 5; // Will try 5 times (approx 40 seconds of waiting)
+
+    while (retries > 0) {
+      try {
+        console.log(`⏳ Knocking on Python's door... (Retries left: ${retries})`);
+        pythonRes = await axios.post(PYTHON_RENDER_URL, pythonPayload);
+        break; // IT WORKED! Break out of the loop!
+      } catch (axiosErr) {
+        retries--;
+        
+        if (retries === 0) {
+          console.log("❌ Python never woke up. Giving up.");
+          return res.status(500).json({ error: "Python server failed to wake up after multiple attempts." });
+        }
+        
+        console.log("😴 Python is asleep. Waiting 8 seconds and knocking again...");
+        // Wait exactly 8 seconds before looping again
+        await new Promise(resolve => setTimeout(resolve, 8000));
       }
-      res.status(500).json({ error: "Python server rejected the request" });
     }
+
+    // If we made it here, Python successfully answered!
+    console.log(`✅ Python replied with Status ${pythonRes.status}:`, pythonRes.data);
+    res.status(200).json({ message: "Sent to AI Engine successfully" });
 
   } catch (error) {
     console.error("❌ Manual upload failed:", error);
