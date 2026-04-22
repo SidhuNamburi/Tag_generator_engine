@@ -46,6 +46,14 @@ app.use((req, res, next) => {
   next();
 });
 
+app.get('/', (req, res) => {
+  res.status(200).json({ 
+    status: "online", 
+    message: "Tag & Trail Node Backend is running",
+    socket_status: io.sockets.connected ? "active" : "waiting"
+  });
+});
+
 // 👇 CLOUDINARY & MULTER CONFIG
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
